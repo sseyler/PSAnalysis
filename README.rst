@@ -1,8 +1,8 @@
 .. -*- mode: rst; coding: utf-8 -*-
 
-===================================
- Path Similarity Analysis Tutorial
-===================================
+==========================
+ Path Similarity Analysis
+==========================
 
 |zenodo|
 
