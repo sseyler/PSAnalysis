@@ -24,17 +24,16 @@ Calculating path similarity --- :mod:`MDAnalysis.analysis.psa`
 
 .. versionadded:: 0.10.0
 
-The module contains code to calculate the geometric similarity of
-trajectories using path metrics such as the Hausdorff or Frechet
-distances. The path metrics are functions of two paths and return a
+The module contains code to calculate the geometric similarity of trajectories
+using path metrics such as the Hausdorff or Fréchet distances
+[Seyler2015]_. The path metrics are functions of two paths and return a
 nonnegative number, i.e., a distance. Two paths are identical if their distance
-is zero, and large distances indicate dissimilarity. Each path metric
-is a function of the individual points (e.g., coordinate snapshots)
-that comprise each path and, loosely speaking, identify the two points,
-one per path of a pair of paths, where the paths deviate the most.
-The distance between these points of maximal deviation is measured by
-the root mean square deviation (RMSD), i.e., to compute structural
-similarity.
+is zero, and large distances indicate dissimilarity. Each path metric is a
+function of the individual points (e.g., coordinate snapshots) that comprise
+each path and, loosely speaking, identify the two points, one per path of a
+pair of paths, where the paths deviate the most.  The distance between these
+points of maximal deviation is measured by the root mean square deviation
+(RMSD), i.e., to compute structural similarity.
 
 One typically computes the pairwise similarity for an ensemble of paths to
 produce a symmetric distance matrix, which can be clustered to, at a glance,
@@ -43,20 +42,25 @@ one must select a suitable reference structure to which all paths (each
 conformer in each path) will be universally aligned using the rotations
 determined by the best-fit rmsds. Distances between paths and their structures
 are then computed directly with no further alignment. This pre-processing step
-is necessary to preserve the metric properties of the Hausdorff and Frechet
+is necessary to preserve the metric properties of the Hausdorff and Fréchet
 metrics; using the best-fit rmsd on a pairwise basis does not generally
 preserve the triangle inequality.
 
-The `PSA tutorial`_ shows how to do the individual steps
-manually and explains the intermediate steps.
+.. SeeAlso:: The `PSAnalysisTutorial`_ outlines a typical application of PSA to
+             a set of trajectories, including doing proper alignment,
+             performing distance comparisons, and generating heat
+             map-dendrogram plots from hierarchical clustering.
 
-.. SeeAlso::
 
-   :mod:`MDAnalysis.analysis.psa`
-        contains functions to align a set of paths and compute clustered
-        (Hausdorff or Fréchet) distance matrices
+.. Rubric:: References
 
-.. _`PSA tutorial`: https://github.com/Becksteinlab/[something here]
+.. [Seyler2015] Sean L. Seyler, Avishek Kumar, Michael F. Thorpe, Oliver Beckstein.
+   *Path Similarity Analysis: a Method for Quantifying Macromolecular
+   Pathways.* `arXiv:1505.04807`_ (2015).
+
+.. _`arXiv:1505.04807`: http://arxiv.org/abs/1505.04807
+.. _`PSAnalysisTutorial`: https://github.com/Becksteinlab/PSAnalysisTutorial
+
 
 Helper functions and variables
 ------------------------------
@@ -64,8 +68,8 @@ Helper functions and variables
 The following global variables are used by the functions and classes in this
 module.
 
-   hausdorff_names
-   frechet_names
+.. data::   hausdorff_names
+.. data::   frechet_names
 
 The following functions are used by the other functions in this module.
 
@@ -77,7 +81,7 @@ Classes, methods, and functions
 
 .. autofunction:: get_path_metric_func
 .. autofunction:: hausdorff
-.. autofunction:: frechet
+.. autofunction:: discrete_frechet
 
 .. autoclass:: Path
    :members:
@@ -114,11 +118,6 @@ Classes, methods, and functions
 
       :class:`numpy.ndarray` object representation of the fitted trajectory
 
-   .. automethod:: fit_to_reference
-
-   .. automethod:: to_path
-
-   .. automethod:: run
 
 .. autoclass:: PSA
    :members:
@@ -160,22 +159,9 @@ Classes, methods, and functions
 
       string, name of file to store calculated distance matrix (:attr:`PSA.D`)
 
-   .. automethod:: generate_paths
-
-   .. automethod:: output_exists
-
-   .. automethod:: run
-
-   .. automethod:: save
-
-   .. automethod:: load
-
-   .. automethod:: plot
-
 """
 
 import numpy
-import scipy.spatial.distance as sp
 
 import MDAnalysis
 import MDAnalysis.analysis.align
@@ -189,7 +175,7 @@ logger = logging.getLogger('MDAnalysis.analysis.psa')
 
 
 def get_path_metric_func(name):
-    """Selects a path metric function by name.
+    r"""Selects a path metric function by name.
 
     :Arguments:
       *name*
@@ -210,17 +196,17 @@ def get_path_metric_func(name):
 
 
 def hausdorff(P,Q, N=None):
-    """Calculate the Hausdorff distance between two paths.
+    r"""Calculate the Hausdorff distance between two paths.
 
-    .. |3Dp| replace:: :math:`N_p\times N\times 3`
-    .. |2Dp| replace:: :math:`N_p\times(3N)`
-    .. |3Dq| replace:: :math:`N_q\times N\times 3`
-    .. |2Dq| replace:: :math:`N_q\times(3N)`
+    .. |3Dp| replace:: :math:`N_p \times N \times 3`
+    .. |2Dp| replace:: :math:`N_p \times (3N)`
+    .. |3Dq| replace:: :math:`N_q \times N \times 3`
+    .. |2Dq| replace:: :math:`N_q \times (3N)`
 
     *P* (*Q*) is a :class:`numpy.ndarray` of :math:`N_p` (:math:`N_q`) time
     steps, :math:`N` atoms, and :math:`3N` coordinates (e.g.,
     :meth:`MDAnalysis.core.AtomGroup.AtomGroup.coordinates`). *P* (*Q*) has
-    either shape |3Dp| (|3Dq|), or :|2Dp| (|2Dq|) in flattened form.
+    either shape |3Dp| (|3Dq|), or |2Dp| (|2Dq|) in flattened form.
 
     :Arguments:
       *P*
@@ -255,12 +241,12 @@ def hausdorff(P,Q, N=None):
     else:
         axis = 1
     d = numpy.array([sqnorm(p - Q, axis) for p in P])
-    return ( max( numpy.amax(numpy.amin(d, axis=0)),                            \
+    return ( max( numpy.amax(numpy.amin(d, axis=0)),             \
                   numpy.amax(numpy.amin(d, axis=1)) ) / N  )**0.5
 
 
 def discrete_frechet(P,Q, N=None):
-    """Calculate the discrete Frechet distance between two paths.
+    r"""Calculate the discrete Frechet distance between two paths.
 
     .. |3Dp| replace:: :math:`N_p\times N\times 3`
     .. |2Dp| replace:: :math:`N_p\times(3N)`
@@ -309,7 +295,7 @@ def discrete_frechet(P,Q, N=None):
     ca = -numpy.ones((Np, Nq))
 
     def c(i, j):
-        """Compute the coupling distance for two partial paths formed by *P* and
+        r"""Compute the coupling distance for two partial paths formed by *P* and
         *Q*, where both begin at frame 0 and end (inclusive) at the respective
         frame indices :math:`i-1` and :math:`j-1`. The partial path of *P* (*Q*)
         up to frame *i* (*j*) is formed by the slicing ``P[0:i]`` (``Q[0:j]``).
@@ -340,7 +326,7 @@ def discrete_frechet(P,Q, N=None):
 
 
 def sqnorm(v, axis=None):
-    """Compute the sum of squares of elements along specified axes.
+    r"""Compute the sum of squares of elements along specified axes.
 
     :Arguments:
       *v*
@@ -376,7 +362,7 @@ class PDBToBinaryTraj(object):
 
 
 class Path(object):
-    """Pre-process a :class:`MDAnalysis.Universe` object: (1) fit the
+    r"""Pre-process a :class:`MDAnalysis.Universe` object: (1) fit the
     trajectory to a reference structure, (2) convert fitted time series to a
     :class:`numpy.ndarray` representation of :attr:`Path.path`.
 
@@ -390,7 +376,7 @@ class Path(object):
 
     def __init__(self, universe, reference, ref_select='name CA',
                  path_select='all', ref_frame=0):
-        """Setting up trajectory alignment and fitted path generation.
+        r"""Setting up trajectory alignment and fitted path generation.
 
         :Arguments:
           *universe*
@@ -435,7 +421,7 @@ class Path(object):
     def fit_to_reference(self, filename=None, prefix='', postfix='_fit',
                          rmsdfile=None, targetdir=os.path.curdir,
                          mass_weighted=False, tol_mass=0.1):
-        """Align each trajectory frame to the reference structure with
+        r"""Align each trajectory frame to the reference structure with
         :func:`MDAnalysis.analysis.align.rms_fit_trj`.
 
         :Arguments:
@@ -461,7 +447,6 @@ class Path(object):
         filename = filename or oldname
         self.newtrj_name = os.path.join(targetdir, filename + postfix + ext)
         self.u_reference.trajectory[self.ref_frame] # select frame from ref traj
-        print self.ref_select
         MDAnalysis.analysis.align.rms_fit_trj(self.u_original, self.u_reference,
                 select=self.ref_select, filename=self.newtrj_name,
                 rmsdfile=rmsdfile, prefix=prefix, mass_weighted=mass_weighted,
@@ -470,7 +455,7 @@ class Path(object):
 
 
     def to_path(self, fitted=False, select=None, flat=False):
-        """Generates a coordinate time series from the fitted universe
+        r"""Generates a coordinate time series from the fitted universe
         trajectory.
 
         .. |Np| replace:: :math:`N_p`
@@ -524,7 +509,7 @@ class Path(object):
     def run(self, align=False, filename=None, postfix='_fit', rmsdfile=None,
             targetdir=os.path.curdir, mass_weighted=False, tol_mass=0.1,
             flat=False):
-        """Generate a path from a trajectory and reference structure, aligning
+        r"""Generate a path from a trajectory and reference structure, aligning
         to a reference structure if specified.
 
         .. |3D| replace:: :math:`N_p\times N\times 3`
@@ -579,7 +564,7 @@ class Path(object):
 
 
 class PSA(object):
-    """Perform Path Similarity Analysis (PSA) on a set of trajectories.
+    r"""Perform Path Similarity Analysis (PSA) on a set of trajectories.
 
     The analysis is performed with :meth:`PSA.run` and stores the result
     in the :class:`numpy.ndarray` distance matrix :attr:`PSA.D`. :meth:`PSA.run`
@@ -591,7 +576,7 @@ class PSA(object):
     def __init__(self, universes, reference=None, ref_select='name CA',
                  ref_frame=0, path_select=None, labels=None,
                  targetdir=None):
-        """Setting up Path Similarity Analysis.
+        r"""Setting up Path Similarity Analysis.
 
         The mutual similarity between all unique pairs of trajectories
         are computed using a selected path metric.
@@ -692,12 +677,13 @@ class PSA(object):
         with open(self._labels_pkl, 'wb') as output:
             pickle.dump(self.labels, output)
 
+        self.natoms = None
         self.paths = None
         self.D = None
 
 
     def generate_paths(self, **kwargs):
-        """Generate paths, aligning each to reference structure if necessary.
+        r"""Generate paths, aligning each to reference structure if necessary.
 
         .. |3D| replace:: :math:`N_p\times N\times 3`
         .. |2D| replace:: :math:`N_p\times 3N`
@@ -763,6 +749,17 @@ class PSA(object):
             paths.append(p.path)
             fit_trj_names.append(fit_trj_name)
         self.paths = paths
+
+
+        ################################################
+        ### HACK FOR FLATTENED PATHS AND CYTHON TESTING
+        self.flat = True
+        self.natoms = self.paths[0].shape[1]
+        for i, p in enumerate(self.paths):
+            self.paths[i] = numpy.reshape(p,(p.shape[0], 3*self.natoms))
+                # numpy.asfarray(), dtype='double')
+        ################################################
+
         self.fit_trj_names = fit_trj_names
         if save:
             with open(self._fit_trjs_pkl, 'wb') as output:
@@ -773,7 +770,7 @@ class PSA(object):
 
 
     def run(self, **kwargs):
-        """Perform path similarity analysis on the trajectories to compute
+        r"""Perform path similarity analysis on the trajectories to compute
         the distance matrix.
 
         A number of parameters can be changed from the defaults. The
@@ -798,22 +795,26 @@ class PSA(object):
         step = kwargs.pop('step', None)
         store = kwargs.pop('store', True)
 
-        metric_func = get_path_metric_func(metric)
+        if type(metric) is str:
+            metric_func = get_path_metric_func(metric)
+        else:
+            metric_func = metric
         npaths = len(self.paths)
         D = numpy.zeros((npaths,npaths))
+
         for i in xrange(0, npaths-1):
             for j in xrange(i+1, npaths):
                 P = self.paths[i][start:stop:step]
                 Q = self.paths[j][start:stop:step]
-                D[i,j] = D[j,i] = metric_func(P, Q)
+                D[i,j] = D[j,i] = metric_func(P, Q, self.natoms)
         self.D = D
         if store:
-            filename = kwargs.pop('filename', metric)
+            filename = kwargs.pop('filename', str(metric))
             self.save_result(filename=filename)
 
 
     def save_result(self, filename=None):
-        """Save distance matrix :attr:`PSA.D` to a numpy compressed npz file and
+        r"""Save distance matrix :attr:`PSA.D` to a numpy compressed npz file and
         text file.
 
         :Arguments:
@@ -837,7 +838,7 @@ class PSA(object):
 
 
     def save_paths(self, filename=None):
-        """Save fitted :attr:`PSA.paths` to numpy compressed npz files.
+        r"""Save fitted :attr:`PSA.paths` to numpy compressed npz files.
 
         :Arguments:
           *filename*
@@ -864,7 +865,7 @@ class PSA(object):
 
 
     def load(self):
-        """Load fitted paths specified by 'psa_path-names.pkl' in
+        r"""Load fitted paths specified by 'psa_path-names.pkl' in
         :attr:`PSA.targetdir`.
         """
         if not os.path.exists(self._paths_pkl):
@@ -879,7 +880,7 @@ class PSA(object):
 
     def plot(self, filename=None, linkage='ward', count_sort=False,
              distance_sort=False, figsize=4.5, labelsize=12):
-        """Plot a clustered distance matrix using method *linkage* along with
+        r"""Plot a clustered distance matrix using method *linkage* along with
         the corresponding dendrogram. Rows (and columns) are identified using
         the list of strings specified by :attr:`PSA.labels`.
 
@@ -968,7 +969,7 @@ class PSA(object):
 
     def cluster(self, distArray, method='ward', count_sort=False,
                 distance_sort=False, no_labels=True, color_threshold=4):
-        """
+        r"""
             Cluster trajectories.
 
             :Arguments:
@@ -1005,7 +1006,7 @@ class PSA(object):
 
 
     def _get_plot_obj_locs(self):
-        """
+        r"""
             Return the coordinates for dendrogram, heat map, and colorbar.
 
             :Returns:

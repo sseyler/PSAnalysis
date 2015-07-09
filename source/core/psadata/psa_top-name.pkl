@@ -1,0 +1,3 @@
+S'/nfs/homes/sseyler/Repositories/python/psanalysis/methods/DIMS/top.psf'
+p1
+.
