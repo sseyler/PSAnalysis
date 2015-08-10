@@ -1,3 +1,3 @@
-S'/nfs/homes/sseyler/Repositories/python/psanalysis/methods/DIMS/top.psf'
+S'/Users/sseyler/Repositories/python/psanalysis/methods/Morph/top.pdb'
 p1
 .
