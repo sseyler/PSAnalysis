@@ -909,7 +909,7 @@ class PSA(object):
         distMatrix = self.D
 
         dgram_loc, hmap_loc, cbar_loc = self._get_plot_obj_locs()
-        aspect_ratio = 1.2
+        aspect_ratio = 1.25
         fig = figure(figsize=(figsize*aspect_ratio,figsize))
         ax_hmap = fig.add_axes(hmap_loc)
         ax_dgram = fig.add_axes(dgram_loc)
@@ -937,7 +937,7 @@ class PSA(object):
         ax_hmap.set_xticklabels(collabels, rotation='vertical',                 \
                 size=(labelsize-4), multialignment='center', minor=True)
         ax_hmap.set_yticklabels(rowlabels, rotation='horizontal',               \
-                size=(labelsize-4), multialignment='left', ha='right',         \
+                size=(labelsize-4), multialignment='left', ha='right',          \
                 minor=True)
 
         ax_color = fig.add_axes(cbar_loc)
@@ -964,7 +964,7 @@ class PSA(object):
             outfile = os.path.join(head, filename)
             savefig(outfile, dpi=300, bbox_inches='tight')
 
-        return Z, dgram
+        return Z, dgram, clustMatrix
 
 
     def cluster(self, distArray, method='ward', count_sort=False,
