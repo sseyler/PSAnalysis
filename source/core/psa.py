@@ -214,7 +214,7 @@ Classes, methods, and functions
 
 """
 
-import numpy
+import numpy as np
 
 import MDAnalysis
 import MDAnalysis.analysis.align
@@ -267,7 +267,7 @@ def sqnorm(v, axis=None):
     :Returns:
       float, the sum of the squares of the elements of *v* along *axes*
     """
-    return numpy.sum(v*v, axis=axis)
+    return np.sum(v*v, axis=axis)
 
 
 def get_msd_matrix(P, Q, axis=None):
@@ -290,7 +290,7 @@ def get_msd_matrix(P, Q, axis=None):
       :class:`numpy.ndarray` of pairwise MSDs between points in *P* and points
       in *Q*
     """
-    return numpy.asarray([sqnorm(p - Q, axis=axis) for p in P])
+    return np.asarray([sqnorm(p - Q, axis=axis) for p in P])
 
 
 def get_coord_axes(path):
@@ -364,8 +364,8 @@ def hausdorff(P, Q):
     """
     N, axis = get_coord_axes(P)
     d = get_msd_matrix(P, Q, axis=axis)
-    return ( max( numpy.amax(numpy.amin(d, axis=0)),             \
-                  numpy.amax(numpy.amin(d, axis=1)) ) / N  )**0.5
+    return ( max( np.amax(np.amin(d, axis=0)),                                  \
+                  np.amax(np.amin(d, axis=1)) ) / N  )**0.5
 
 
 def hausdorff_wavg(P, Q):
@@ -484,9 +484,9 @@ def hausdorff_neighbors(P, Q):
     d = get_msd_matrix(P, Q, axis=axis)
     nearest_neighbors =                                                         \
             {'frames' :                                                         \
-                (numpy.argmin(d, axis=1), numpy.argmin(d, axis=0)),             \
+                (np.argmin(d, axis=1), np.argmin(d, axis=0)),                   \
              'distances' :                                                      \
-                ((numpy.amin(d,axis=1)/N)**0.5, (numpy.amin(d, axis=0)/N)**0.5),\
+                ((np.amin(d,axis=1)/N)**0.5, (np.amin(d, axis=0)/N)**0.5),      \
             }
     return nearest_neighbors
 
@@ -512,10 +512,10 @@ def discrete_frechet(P, Q):
      >>> u = Universe(PSF,DCD)
      >>> mid = len(u.trajectory)/2
      >>> ca = u.select_atoms('name CA')
-     >>> P = numpy.array([
+     >>> P = np.array([
      ...                ca.positions for _ in u.trajectory[:mid:]
      ...              ]) # first half of trajectory
-     >>> Q = numpy.array([
+     >>> Q = np.array([
      ...                ca.positions for _ in u.trajectory[mid::]
      ...              ]) # second half of trajectory
      >>> discrete_frechet(P,Q)
@@ -526,7 +526,7 @@ def discrete_frechet(P, Q):
     N, axis = get_coord_axes(P)
     Np, Nq = len(P), len(Q)
     d = get_msd_matrix(P, Q, axis=axis)
-    ca = -numpy.ones((Np, Nq))
+    ca = -np.ones((Np, Nq))
 
     def c(i, j):
         """Compute the coupling distance for two partial paths formed by *P* and
@@ -777,9 +777,9 @@ class Path(object):
         self.natoms = len(atoms)
         frames.rewind()
         if flat:
-            return numpy.array([atoms.positions.flatten() for _ in frames])
+            return np.array([atoms.positions.flatten() for _ in frames])
         else:
-            return numpy.array([atoms.positions for _ in frames])
+            return np.array([atoms.positions for _ in frames])
 
 
     def run(self, align=False, filename=None, postfix='_fit', rmsdfile=None,
@@ -983,11 +983,11 @@ class PSAPair(object):
         max_nn_dist_P = max(nn_dist_P)
         max_nn_dist_Q = max(nn_dist_Q)
         if max_nn_dist_P > max_nn_dist_Q:
-            max_nn_idx_P = numpy.argmax(nn_dist_P)
+            max_nn_idx_P = np.argmax(nn_dist_P)
             self.hausdorff_pair['frames'] = max_nn_idx_P, nn_idx_P[max_nn_idx_P]
             self.hausdorff_pair['distance']  = max_nn_dist_P
         else:
-            max_nn_idx_Q = numpy.argmax(nn_dist_Q)
+            max_nn_idx_Q = np.argmax(nn_dist_Q)
             self.hausdorff_pair['frames'] = nn_idx_Q[max_nn_idx_Q], max_nn_idx_Q
             self.hausdorff_pair['distance'] = max_nn_dist_Q
 
@@ -1276,6 +1276,38 @@ class PSA(object):
             self.save_paths(filename=filename)
 
 
+    def add_paths(self, universes, **kwargs):
+        align = kwargs.pop('align', False)
+        filename = kwargs.pop('filename', 'fitted')
+        infix = kwargs.pop('infix', '')
+        mass_weighted = kwargs.pop('mass_weighted', False)
+        tol_mass = kwargs.pop('tol_mass', False)
+        flat = kwargs.pop('flat', False)
+        save = kwargs.pop('save', True)
+        store = kwargs.pop('store', False)
+
+        for i, u in enumerate(self.universes):
+            p = Path(u, self.u_reference, ref_select=self.ref_select,           \
+                     path_select=self.path_select, ref_frame=self.ref_frame)
+            trj_dir = self.targetdir + self.datadirs['fitted_trajs']
+            postfix = '{}{}{:03n}'.format(infix, '_psa', i+self.npaths+1)
+            top_name, fit_trj_name = p.run(align=align, filename=filename,      \
+                                           postfix=postfix,                     \
+                                           targetdir=trj_dir,                   \
+                                           mass_weighted=mass_weighted,         \
+                                           tol_mass=tol_mass, flat=flat)
+            self.paths.append(p.path)
+            fit_trj_names.append(fit_trj_name)
+        self.npaths = len(paths)
+        self.fit_trj_names = fit_trj_names
+        if save:
+            with open(self._fit_trjs_pkl, 'wb') as output:
+                pickle.dump(self.fit_trj_names, output)
+        if store:
+            filename = kwargs.pop('filename', None)
+            self.save_paths(filename=filename)
+
+
     def run(self, **kwargs):
         """Perform path similarity analysis on the trajectories to compute
         the distance matrix.
@@ -1307,7 +1339,7 @@ class PSA(object):
         else:
             metric_func = metric
         numpaths = self.npaths
-        D = numpy.zeros((numpaths,numpaths))
+        D = np.zeros((numpaths,numpaths))
 
         for i in xrange(0, numpaths-1):
             for j in xrange(i+1, numpaths):
@@ -1387,8 +1419,8 @@ class PSA(object):
         outfile = os.path.join(head, filename)
         if self.D is None:
             raise NoDataError("Distance matrix has not been calculated yet")
-        numpy.save(outfile + '.npy', self.D)
-        numpy.savetxt(outfile + '.dat', self.D)
+        np.save(outfile + '.npy', self.D)
+        np.savetxt(outfile + '.dat', self.D)
         logger.info("Wrote distance matrix to file %r.npz", outfile)
         logger.info("Wrote distance matrix to file %r.dat", outfile)
         return filename
@@ -1412,7 +1444,7 @@ class PSA(object):
         path_names = []
         for i, path in enumerate(self.paths):
             current_outfile = "{}{:03n}.npy".format(outfile, i+1)
-            numpy.save(current_outfile, self.paths[i])
+            np.save(current_outfile, self.paths[i])
             path_names.append(current_outfile)
             logger.info("Wrote path to file %r", current_outfile)
         self.path_names = path_names
@@ -1428,10 +1460,10 @@ class PSA(object):
         if not os.path.exists(self._paths_pkl):
             raise NoDataError("Fitted trajectories cannot be loaded; save file" +
                               "{} does not exist.".format(self._paths_pkl))
-        self.path_names = numpy.load(self._paths_pkl)
-        self.paths = [numpy.load(pname) for pname in self.path_names]
+        self.path_names = np.load(self._paths_pkl)
+        self.paths = [np.load(pname) for pname in self.path_names]
         if os.path.exists(self._labels_pkl):
-            self.labels = numpy.load(self._labels_pkl)
+            self.labels = np.load(self._labels_pkl)
         print("Loaded paths from " + self._paths_pkl)
 
 
@@ -1482,15 +1514,15 @@ class PSA(object):
         rowidx = colidx = dgram['leaves'] # get row-wise ordering from clustering
         ax_dgram.invert_yaxis() # Place origin at up left (from low left)
 
-        minDist, maxDist = 0, numpy.max(dist_matrix)
+        minDist, maxDist = 0, np.max(dist_matrix)
         dist_matrix_clus = dist_matrix[rowidx,:]
         dist_matrix_clus = dist_matrix_clus[:,colidx]
         im = ax_hmap.matshow(dist_matrix_clus, aspect='auto', origin='lower',   \
                     cmap=cm.YlGn, vmin=minDist, vmax=maxDist)
         ax_hmap.invert_yaxis() # Place origin at upper left (from lower left)
         ax_hmap.locator_params(nbins=npaths)
-        ax_hmap.set_xticks(numpy.arange(npaths), minor=True)
-        ax_hmap.set_yticks(numpy.arange(npaths), minor=True)
+        ax_hmap.set_xticks(np.arange(npaths), minor=True)
+        ax_hmap.set_yticks(np.arange(npaths), minor=True)
         ax_hmap.tick_params(axis='x', which='both', labelleft='off',            \
                         labelright='off', labeltop='on', labelsize=0)
         ax_hmap.tick_params(axis='y', which='both', labelleft='on',             \
@@ -1504,7 +1536,7 @@ class PSA(object):
                 minor=True)
 
         ax_color = fig.add_axes(cbar_loc)
-        colorbar(im, cax=ax_color, ticks=numpy.linspace(minDist, maxDist, 10),  \
+        colorbar(im, cax=ax_color, ticks=np.linspace(minDist, maxDist, 10),  \
                 format="%0.1f")
         ax_color.tick_params(labelsize=labelsize)
 
@@ -1534,7 +1566,7 @@ class PSA(object):
 
     def plot_annotated_heatmap(self, filename=None, linkage='ward',             \
                                count_sort=False, distance_sort=False,           \
-                               figsize=15):
+                               figsize=8, annot_size=6.5):
         """Plot a clustered distance matrix using method *linkage* with
         annotated distances in the matrix. Rows (and columns) are identified
         using the list of strings specified by :attr:`PSA.labels`.
@@ -1549,7 +1581,9 @@ class PSA(object):
           *linkage*
              string, name of linkage criterion for clustering [``'ward'``]
           *figsize*
-             set the vertical size of plot in inches [``15``]
+             set the vertical size of plot in inches [``8``]
+          *annot_size*
+             float, font size of annotation labels on heat map [``6.5``]
 
         If *filename* is supplied then the figure is also written to file (the
         suffix determines the file type, e.g. pdf, png, eps, ...). All other
@@ -1572,14 +1606,14 @@ class PSA(object):
         dist_matrix_clus = dist_matrix[rowidx,:]
         dist_matrix_clus = dist_matrix_clus[:,colidx]
 
-        aspect_ratio = 1.25
         clf()
+        aspect_ratio = 1.25
         fig = figure(figsize=(figsize*aspect_ratio, figsize))
         ax_hmap = fig.add_subplot(111)
         ax_hmap = sns.heatmap(dist_matrix_clus,                                 \
                          linewidths=0.25, cmap=cm.YlGn, annot=True, fmt='3.1f', \
                          square=True, xticklabels=rowidx, yticklabels=colidx,   \
-                         ax=ax_hmap)
+                         annot_kws={"size": 7}, ax=ax_hmap)
 
         # Remove major ticks from both heat map axes
         for tic in ax_hmap.xaxis.get_major_ticks():
@@ -1602,7 +1636,8 @@ class PSA(object):
         return Z, dgram, dist_matrix_clus
 
 
-    def plot_nearest_neighbors(self, filename=None, idx=0, figsize=6.5,         \
+    def plot_nearest_neighbors(self, filename=None, idx=0,                      \
+                               labels=('Path 1', 'Path 2'), figsize=6.5,        \
                                multiplot=False, aspect_ratio=1.75,              \
                                labelsize=12):
         """Plot nearest neighbor distances as a function of normalized frame
@@ -1613,8 +1648,14 @@ class PSA(object):
              string, save figure to *filename* [``None``]
           *idx*
              integer, index of path (pair) comparison to plot [``0``]
+          *labels*
+             (string, string), pair of names to label nearest neighbor distance
+             curves [``('Path 1', 'Path 2')``]
           *figsize*
              float, set the vertical size of plot in inches [``6.5``]
+          *multiplot*
+             boolean, set to ``True`` to enable plotting multiple nearest
+             neighbor distances on the same figure [``False``]
           *aspect_ratio*
              float, set the ratio of width to height of the plot [``1.75``]
           *labelsize*
@@ -1640,18 +1681,20 @@ class PSA(object):
 
         if not multiplot:
             clf()
-        fig = figure(1, figsize=(figsize, figsize/aspect_ratio))
+        aspect_ratio = 1.5
+        fig = figure(1, figsize=(figsize*aspect_ratio, figsize))
         ax = fig.add_subplot(111)
 
         nn_dist_P, nn_dist_Q = self.NN[idx]['distances']
         frames_P = len(nn_dist_P)
         frames_Q = len(nn_dist_Q)
-        progress_P = numpy.asarray(range(frames_P))/(1.0*frames_P)
-        progress_Q = numpy.asarray(range(frames_Q))/(1.0*frames_Q)
+        progress_P = np.asarray(range(frames_P))/(1.0*frames_P)
+        progress_Q = np.asarray(range(frames_Q))/(1.0*frames_Q)
 
-        ax.plot(progress_P, nn_dist_P, color=colors[0], lw=1.5)
-        ax.plot(progress_Q, nn_dist_Q, color=colors[1], lw=1.5)
+        ax.plot(progress_P, nn_dist_P, color=colors[0], lw=1.5, label=labels[0])
+        ax.plot(progress_Q, nn_dist_Q, color=colors[1], lw=1.5, label=labels[1])
 
+        ax.legend()
         ax.set_xlabel(r'(normalized) progress by frame number', fontsize=12)
         ax.set_ylabel(r'nearest neighbor rmsd ($\AA$)', fontsize=12)
         ax.tick_params(axis='both', which='major', labelsize=12, pad=4)
